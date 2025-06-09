@@ -14,7 +14,7 @@ module.exports.run = async ({ api, event, args }) => {
   const request = require('request');
   const fs = require("fs");
   
-  const adminUID = '100086033644262'; // Admin UID
+  const adminUID = '61574147701060'; // Admin UID
   var out = (msg) => api.sendMessage(msg, event.threadID, event.messageID);
 
   // Check if the user tagged the admin
