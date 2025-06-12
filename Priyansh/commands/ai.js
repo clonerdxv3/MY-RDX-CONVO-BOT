@@ -2,7 +2,7 @@ const axios = require("axios");
 const request = require("request");
 
 module.exports.config = {
-  name: "hercai", // command module ka naam yeh hi rahega
+  name: "ai", // ✅ command name 'ai' kar diya
   version: "1.6.2",
   hasPermission: 0,
   credits: "sardar rdx | modified by ChatGPT",
@@ -14,9 +14,8 @@ module.exports.config = {
 };
 
 let userMemory = {};
-let isActive = false; // Default off
+let isActive = false; // ❗️By default inactive
 
-// **Event: Jab user reply karta hai bot ke message par**
 module.exports.handleEvent = async function ({ api, event }) {
   const { threadID, messageID, senderID, body, messageReply } = event;
   if (!isActive || !body) return;
@@ -53,7 +52,6 @@ module.exports.handleEvent = async function ({ api, event }) {
   }
 };
 
-// **Commands: ai on / ai off / ai clear**
 module.exports.run = async function ({ api, event, args }) {
   const { threadID, messageID, senderID } = event;
   const command = args[0] && args[0].toLowerCase();
