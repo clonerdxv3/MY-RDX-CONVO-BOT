@@ -5,7 +5,7 @@ module.exports.config = {
   name: "hercai",
   version: "1.6.1",
   hasPermission: 0,
-  credits: "SHANKAR SIR",
+  credits: "sardar rdx | modified by ChatGPT",
   description: "AI bot jo har user ki baat cheet ko yaad rakh kar jawab dega",
   commandCategory: "AI",
   usePrefix: false,
@@ -14,56 +14,21 @@ module.exports.config = {
 };
 
 let userMemory = {};
-let isActive = true;
+let isActive = false; // ❗️Default state inactive rakha gaya hai
 
-// ⬇️ Owner UID + last welcome time tracking
-const OWNER_UID = "61574147701060";
-let lastWelcomeTime = {};
-
-// ⬇️ Boss welcome messages
-const welcomeMessages = [
-  "👑 Boss agaye! Sab sidhe ho jao 😎",
-  "🔥 Welcome back king! Tashreef laayein",
-  "💼 Sir online ho gaye, ab kaam hoga!",
-  "🎩 Boss ki entry hui hai, show shuru!",
-];
-
+// **Bot ka main event**
 module.exports.handleEvent = async function ({ api, event }) {
-  const { threadID, senderID, messageID, body, messageReply } = event;
-  if (!body) return;
+  const { threadID, messageID, senderID, body, messageReply } = event;
+  if (!isActive || !body) return; // ❗️Only run if active
 
-  // ⬇️ Chat on/off control
-  const loweredBody = body.toLowerCase().trim();
-  if (loweredBody === "chat on") {
-    isActive = true;
-    return api.sendMessage("✅ Chat bot ab active hai.", threadID, messageID);
-  }
-
-  if (loweredBody === "chat off") {
-    isActive = false;
-    return api.sendMessage("❌ Chat bot ab inactive hai.", threadID, messageID);
-  }
-
-  if (!isActive) return;
-
-  // ✅ Respectful Welcome for Owner every 30 mins
-  const now = Date.now();
-  if (
-    senderID === OWNER_UID &&
-    (!lastWelcomeTime[threadID] || now - lastWelcomeTime[threadID] > 30 * 60 * 1000)
-  ) {
-    lastWelcomeTime[threadID] = now;
-    const msg = welcomeMessages[Math.floor(Math.random() * welcomeMessages.length)];
-    api.sendMessage(msg, threadID);
-  }
-
-  // ⬇️ Hercai main logic
   if (!messageReply || messageReply.senderID !== api.getCurrentUserID()) return;
+
   const userQuery = body.trim();
+
   if (!userMemory[senderID]) userMemory[senderID] = [];
 
   const conversationHistory = userMemory[senderID].join("\n");
-  const fullQuery = conversationHistory + `\nUser: ${userQuery}\nBot (reply in Roman Urdu):`;
+  const fullQuery = conversationHistory + `\nUser: ${userQuery}\nBot:`;
 
   const apiURL = `https://shankar-gpt-3-api.vercel.app/api?message=${encodeURIComponent(fullQuery)}`;
 
@@ -88,16 +53,17 @@ module.exports.handleEvent = async function ({ api, event }) {
   }
 };
 
+// **Bot ke commands**
 module.exports.run = async function ({ api, event, args }) {
   const { threadID, messageID, senderID } = event;
   const command = args[0] && args[0].toLowerCase();
 
   if (command === "on") {
     isActive = true;
-    return api.sendMessage("✅ Hercai bot ab active hai.", threadID, messageID);
+    return api.sendMessage("✅ Hercai bot ab *active* hai. Ab aap mujhe reply kar sakte hain.", threadID, messageID);
   } else if (command === "off") {
     isActive = false;
-    return api.sendMessage("⚠️ Hercai bot ab inactive hai.", threadID, messageID);
+    return api.sendMessage("⚠️ Hercai bot ab *inactive* hai. Jab tak 'hercai on' nahi likhenge, bot jawab nahi dega.", threadID, messageID);
   } else if (command === "clear") {
     if (args[1] && args[1].toLowerCase() === "all") {
       userMemory = {};
@@ -109,5 +75,7 @@ module.exports.run = async function ({ api, event, args }) {
     } else {
       return api.sendMessage("⚠️ Aapki koi bhi saved history mojood nahi hai.", threadID, messageID);
     }
+  } else {
+    return api.sendMessage("ℹ️ Hercai bot ka istemal:\n- hercai on\n- hercai off\n- hercai clear [all]", threadID, messageID);
   }
 };
