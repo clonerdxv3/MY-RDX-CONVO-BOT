@@ -2,24 +2,24 @@ const axios = require("axios");
 const request = require("request");
 
 module.exports.config = {
-  name: "hercai",
-  version: "1.6.1",
+  name: "hercai", // command module ka naam yeh hi rahega
+  version: "1.6.2",
   hasPermission: 0,
   credits: "sardar rdx | modified by ChatGPT",
   description: "AI bot jo har user ki baat cheet ko yaad rakh kar jawab dega",
   commandCategory: "AI",
   usePrefix: false,
-  usages: "[Bot ke message par reply karein]",
+  usages: "[ai on / ai off / ai clear]",
   cooldowns: 5,
 };
 
 let userMemory = {};
-let isActive = false; // ❗️Default state inactive rakha gaya hai
+let isActive = false; // Default off
 
-// **Bot ka main event**
+// **Event: Jab user reply karta hai bot ke message par**
 module.exports.handleEvent = async function ({ api, event }) {
   const { threadID, messageID, senderID, body, messageReply } = event;
-  if (!isActive || !body) return; // ❗️Only run if active
+  if (!isActive || !body) return;
 
   if (!messageReply || messageReply.senderID !== api.getCurrentUserID()) return;
 
@@ -53,17 +53,17 @@ module.exports.handleEvent = async function ({ api, event }) {
   }
 };
 
-// **Bot ke commands**
+// **Commands: ai on / ai off / ai clear**
 module.exports.run = async function ({ api, event, args }) {
   const { threadID, messageID, senderID } = event;
   const command = args[0] && args[0].toLowerCase();
 
   if (command === "on") {
     isActive = true;
-    return api.sendMessage("✅ Hercai bot ab *active* hai. Ab aap mujhe reply kar sakte hain.", threadID, messageID);
+    return api.sendMessage("✅ AI bot ab *active* hai. Aap reply kar sakte hain.", threadID, messageID);
   } else if (command === "off") {
     isActive = false;
-    return api.sendMessage("⚠️ Hercai bot ab *inactive* hai. Jab tak 'hercai on' nahi likhenge, bot jawab nahi dega.", threadID, messageID);
+    return api.sendMessage("⚠️ AI bot ab *inactive* hai. Jab tak 'ai on' nahi likhenge, bot kaam nahi karega.", threadID, messageID);
   } else if (command === "clear") {
     if (args[1] && args[1].toLowerCase() === "all") {
       userMemory = {};
@@ -76,6 +76,6 @@ module.exports.run = async function ({ api, event, args }) {
       return api.sendMessage("⚠️ Aapki koi bhi saved history mojood nahi hai.", threadID, messageID);
     }
   } else {
-    return api.sendMessage("ℹ️ Hercai bot ka istemal:\n- hercai on\n- hercai off\n- hercai clear [all]", threadID, messageID);
+    return api.sendMessage("ℹ️ AI bot ka istemal:\n- ai on\n- ai off\n- ai clear [all]", threadID, messageID);
   }
 };
