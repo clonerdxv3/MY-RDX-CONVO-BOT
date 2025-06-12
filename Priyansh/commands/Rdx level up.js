@@ -52,7 +52,7 @@ module.exports.handleEvent = async function({ api, event, Currencies, Users, get
                 const moduleName = this.config.name;
 
     var background = [
-  "https://i.postimg.cc/yYLZHx6C/Messenger-creation-F8393-D5-C-9927-4-A7-D-A695-0-C092-A36-A042.jpg",
+  "https://ibb.co/RkXd3wZt",
   "",
   "",
   "",
