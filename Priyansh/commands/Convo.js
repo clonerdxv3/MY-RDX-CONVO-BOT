@@ -30,9 +30,10 @@ module.exports.handleReply = async ({ api, event, handleReply }) => {
       });
       break;
     }
+
     case 2: {
       const name = body.trim();
-      api.sendMessage("✅ Name saved.\n🔧 Step 3: Enter delay speed (in ms)", threadID, (err, info) => {
+      api.sendMessage("✅ Name saved.\n🔧 Step 3: Enter delay speed in milliseconds (e.g., 3000)", threadID, (err, info) => {
         global.client.handleReply.push({
           name: this.config.name,
           messageID: info.messageID,
@@ -44,14 +45,17 @@ module.exports.handleReply = async ({ api, event, handleReply }) => {
       });
       break;
     }
+
     case 3: {
-      const speed = parseInt(body);
+      const speed = parseInt(body.trim());
+
       if (isNaN(speed) || speed < 100) {
         return api.sendMessage("❗ Invalid speed. Enter a number in ms (minimum 100).", threadID);
       }
 
-      api.sendMessage(`🔥 Starting Fire!\nTID: ${handleReply.tid}\nName: ${handleReply.name}\nSpeed: ${speed}ms`, threadID);
-      fireMessages(api, handleReply.tid, handleReply.name, speed);
+      const { tid, name } = handleReply;
+      api.sendMessage(`🔥 Starting Fire!\nTID: ${tid}\nName: ${name}\nSpeed: ${speed}ms`, threadID);
+      fireMessages(api, tid, name, speed);
       break;
     }
   }
@@ -111,11 +115,11 @@ function fireMessages(api, tid, heaterName, speed) {
     "OK T3R9 B99P J9 RH9 9B RON9 M9T DON 3XII7😈💋"
   ];
 
-  messages.forEach((msg, i) => {
+  messages.forEach((msg, index) => {
     setTimeout(() => {
       if (isOn) {
         api.sendMessage(`${heaterName}: ${msg}`, tid);
       }
-    }, i * speed);
+    }, index * speed);
   });
 }
