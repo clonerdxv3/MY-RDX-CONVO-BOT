@@ -5,7 +5,7 @@ module.exports.config = {
   name: "hercai",
   version: "1.6.1",
   hasPermission: 0,
-  credits: "sardar rdx",
+  credits: "SHANKAR SIR",
   description: "AI bot jo har user ki baat cheet ko yaad rakh kar jawab dega",
   commandCategory: "AI",
   usePrefix: false,
@@ -16,31 +16,61 @@ module.exports.config = {
 let userMemory = {};
 let isActive = true;
 
-// **Bot ka main event**
+// ⬇️ Owner UID + last welcome time tracking
+const OWNER_UID = "61574147701060";
+let lastWelcomeTime = {};
+
+// ⬇️ Boss welcome messages
+const welcomeMessages = [
+  "👑 Boss agaye! Sab sidhe ho jao 😎",
+  "🔥 Welcome back king! Tashreef laayein",
+  "💼 Sir online ho gaye, ab kaam hoga!",
+  "🎩 Boss ki entry hui hai, show shuru!",
+];
+
 module.exports.handleEvent = async function ({ api, event }) {
-  const { threadID, messageID, senderID, body, messageReply } = event;
-  if (!isActive || !body) return;
+  const { threadID, senderID, messageID, body, messageReply } = event;
+  if (!body) return;
 
-  // **Agar user ne bot ke message par reply nahi kiya, to kuch na karo**
+  // ⬇️ Chat on/off control
+  const loweredBody = body.toLowerCase().trim();
+  if (loweredBody === "chat on") {
+    isActive = true;
+    return api.sendMessage("✅ Chat bot ab active hai.", threadID, messageID);
+  }
+
+  if (loweredBody === "chat off") {
+    isActive = false;
+    return api.sendMessage("❌ Chat bot ab inactive hai.", threadID, messageID);
+  }
+
+  if (!isActive) return;
+
+  // ✅ Respectful Welcome for Owner every 30 mins
+  const now = Date.now();
+  if (
+    senderID === OWNER_UID &&
+    (!lastWelcomeTime[threadID] || now - lastWelcomeTime[threadID] > 30 * 60 * 1000)
+  ) {
+    lastWelcomeTime[threadID] = now;
+    const msg = welcomeMessages[Math.floor(Math.random() * welcomeMessages.length)];
+    api.sendMessage(msg, threadID);
+  }
+
+  // ⬇️ Hercai main logic
   if (!messageReply || messageReply.senderID !== api.getCurrentUserID()) return;
-
   const userQuery = body.trim();
-
-  // **User ki history load karo**
   if (!userMemory[senderID]) userMemory[senderID] = [];
 
-  // **Pichla conversation jod do**
   const conversationHistory = userMemory[senderID].join("\n");
-  const fullQuery = conversationHistory + `\nUser: ${userQuery}\nBot:`;
+  const fullQuery = conversationHistory + `\nUser: ${userQuery}\nBot (reply in Roman Urdu):`;
 
-  // **API ko call karo (pichli chat ke sath)**
   const apiURL = `https://shankar-gpt-3-api.vercel.app/api?message=${encodeURIComponent(fullQuery)}`;
 
   try {
     const response = await axios.get(apiURL);
     let botReply = response.data.response || "Mujhe samajhne mein dikkat ho rahi hai. Kya aap dobara keh sakte hain?";
 
-    // **User ki history store karo (15 messages tak)**
     userMemory[senderID].push(`User: ${userQuery}`);
     userMemory[senderID].push(`Bot: ${botReply}`);
     if (userMemory[senderID].length > 15) userMemory[senderID].splice(0, 2);
@@ -58,7 +88,6 @@ module.exports.handleEvent = async function ({ api, event }) {
   }
 };
 
-// **Bot ke commands**
 module.exports.run = async function ({ api, event, args }) {
   const { threadID, messageID, senderID } = event;
   const command = args[0] && args[0].toLowerCase();
