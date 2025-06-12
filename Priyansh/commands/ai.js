@@ -1,23 +1,24 @@
 const axios = require("axios");
-const request = require("request");
 
 module.exports.config = {
-  name: "ai", // ✅ command name 'ai' kar diya
-  version: "1.6.2",
+  name: "ai", // <-- Yeh 'ai' command ban gaya
+  version: "1.0.0",
   hasPermission: 0,
-  credits: "sardar rdx | modified by ChatGPT",
-  description: "AI bot jo har user ki baat cheet ko yaad rakh kar jawab dega",
+  credits: "sardar rdx | Fixed by ChatGPT",
+  description: "AI bot jo reply karta hai jab 'ai on' kiya jaye",
   commandCategory: "AI",
   usePrefix: false,
-  usages: "[ai on / ai off / ai clear]",
+  usages: "[ai on/off/clear]",
   cooldowns: 5,
 };
 
 let userMemory = {};
-let isActive = false; // ❗️By default inactive
+let isActive = false; // Default inactive rakha gaya
 
+// ✅ Bot tabhi kaam karega jab 'ai on' ho
 module.exports.handleEvent = async function ({ api, event }) {
   const { threadID, messageID, senderID, body, messageReply } = event;
+
   if (!isActive || !body) return;
 
   if (!messageReply || messageReply.senderID !== api.getCurrentUserID()) return;
@@ -33,7 +34,7 @@ module.exports.handleEvent = async function ({ api, event }) {
 
   try {
     const response = await axios.get(apiURL);
-    let botReply = response.data.response || "Mujhe samajhne mein dikkat ho rahi hai. Kya aap dobara keh sakte hain?";
+    let botReply = response.data.response || "Mujhe samajhne mein dikkat ho rahi hai.";
 
     userMemory[senderID].push(`User: ${userQuery}`);
     userMemory[senderID].push(`Bot: ${botReply}`);
@@ -41,39 +42,40 @@ module.exports.handleEvent = async function ({ api, event }) {
 
     return api.sendMessage({
       body: botReply,
-      mentions: [{
-        tag: "Bot",
-        id: api.getCurrentUserID()
-      }]
+      mentions: [{ tag: "Bot", id: api.getCurrentUserID() }]
     }, threadID, messageID);
   } catch (error) {
     console.error("API Error:", error.message);
-    return api.sendMessage("❌ AI se jawab laane mein masla hua. Barah-e-karam baad mein koshish karein.", threadID, messageID);
+    return api.sendMessage("❌ AI se jawab laane mein masla hua.", threadID, messageID);
   }
 };
 
+// ✅ Commands: ai on / ai off / ai clear
 module.exports.run = async function ({ api, event, args }) {
   const { threadID, messageID, senderID } = event;
-  const command = args[0] && args[0].toLowerCase();
+  const input = args[0]?.toLowerCase();
 
-  if (command === "on") {
-    isActive = true;
-    return api.sendMessage("✅ AI bot ab *active* hai. Aap reply kar sakte hain.", threadID, messageID);
-  } else if (command === "off") {
-    isActive = false;
-    return api.sendMessage("⚠️ AI bot ab *inactive* hai. Jab tak 'ai on' nahi likhenge, bot kaam nahi karega.", threadID, messageID);
-  } else if (command === "clear") {
-    if (args[1] && args[1].toLowerCase() === "all") {
-      userMemory = {};
-      return api.sendMessage("🧹 Sab users ki chat history clear kar di gayi hai.", threadID, messageID);
-    }
-    if (userMemory[senderID]) {
-      delete userMemory[senderID];
-      return api.sendMessage("🧹 Aapki chat history clear kar di gayi hai.", threadID, messageID);
-    } else {
-      return api.sendMessage("⚠️ Aapki koi bhi saved history mojood nahi hai.", threadID, messageID);
-    }
-  } else {
-    return api.sendMessage("ℹ️ AI bot ka istemal:\n- ai on\n- ai off\n- ai clear [all]", threadID, messageID);
+  switch (input) {
+    case "on":
+      isActive = true;
+      return api.sendMessage("✅ AI bot ab active hai. Reply karne ke liye tayar hai.", threadID, messageID);
+
+    case "off":
+      isActive = false;
+      return api.sendMessage("❌ AI bot ab inactive hai. Jab tak 'ai on' nahi likhenge, bot kaam nahi karega.", threadID, messageID);
+
+    case "clear":
+      if (args[1]?.toLowerCase() === "all") {
+        userMemory = {};
+        return api.sendMessage("🧹 Sab users ki chat history clear kar di gayi hai.", threadID, messageID);
+      }
+      if (userMemory[senderID]) {
+        delete userMemory[senderID];
+        return api.sendMessage("🧹 Aapki chat history clear kar di gayi hai.", threadID, messageID);
+      }
+      return api.sendMessage("⚠️ Aapki koi bhi saved history nahi mili.", threadID, messageID);
+
+    default:
+      return api.sendMessage("📘 Commands:\n• ai on\n• ai off\n• ai clear [all]", threadID, messageID);
   }
 };
