@@ -1,89 +1,84 @@
 const axios = require("axios");
-const moment = require("moment-timezone");
-
-let autoReplyEnabled = true; // Default: Auto-chat is ON
+const request = require("request");
 
 module.exports.config = {
-  name: "ai-autochat",
-  version: "2.1.0",
-  hasPermssion: 0,
-  credits: "Modified by ChatGPT",
-  description: "ChatGPT auto-reply with chat on/off command",
-  commandCategory: "chatbots",
-  usages: "Say 'chat on' or 'chat off'",
-  cooldowns: 3,
+  name: "hercai",
+  version: "1.6.1",
+  hasPermission: 0,
+  credits: "SHANKAR SIR",
+  description: "AI बॉट जो हर यूजर की बातचीत को याद रखकर जवाब देगा",
+  commandCategory: "AI",
+  usePrefix: false,
+  usages: "[बॉट के मैसेज पर रिप्लाई करें]",
+  cooldowns: 5,
 };
 
-async function getUserName(api, senderID) {
-  try {
-    const userInfo = await api.getUserInfo(senderID);
-    return userInfo[senderID].name;
-  } catch (error) {
-    console.log(error);
-    return "User";
-  }
-}
+let userMemory = {};
+let isActive = true;
 
+// **बॉट का मुख्य इवेंट**
 module.exports.handleEvent = async function ({ api, event }) {
-  const { body, senderID, threadID, messageID } = event;
+  const { threadID, messageID, senderID, body, messageReply } = event;
+  if (!isActive || !body) return;
 
-  if (!body || senderID == api.getCurrentUserID()) return;
+  // **अगर यूजर ने बॉट के मैसेज पर रिप्लाई नहीं किया, तो कुछ मत करो**
+  if (!messageReply || messageReply.senderID !== api.getCurrentUserID()) return;
 
-  const messageText = body.toLowerCase().trim();
+  const userQuery = body.trim();
 
-  // Toggle chat on/off
-  if (messageText === "chat on") {
-    autoReplyEnabled = true;
-    return api.sendMessage("Auto chat is now ON.", threadID, messageID);
-  }
+  // **यूजर हिस्ट्री लोड करो**
+  if (!userMemory[senderID]) userMemory[senderID] = [];
 
-  if (messageText === "chat off") {
-    autoReplyEnabled = false;
-    return api.sendMessage("Auto chat is now OFF.", threadID, messageID);
-  }
+  // **यूजर का पिछला कन्वर्सेशन जोड़ें**
+  const conversationHistory = userMemory[senderID].join("\n");
+  const fullQuery = conversationHistory + `\nUser: ${userQuery}\nBot:`;
 
-  // If chat is off, don't reply
-  if (!autoReplyEnabled) return;
-
-  // ChatGPT reply section
-  api.setMessageReaction("⌛", messageID, () => {}, true);
-  api.sendTypingIndicator(threadID, true);
-
-  const apiKey = "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";
-  const userName = await getUserName(api, senderID);
-  const currentTime = moment().tz("Asia/Kolkata").format("MMM D, YYYY - hh:mm A");
-  const prompt = `You are ChatGPT, chatting with a user named ${userName}. Current time: ${currentTime}`;
-  const userMessage = `User: ${body}\nAssistant:`;
+  // **API को कॉल करो (अब पिछली चैट भी भेज रहे हैं)**
+  const apiURL = `https://shankar-gpt-3-api.vercel.app/api?message=${encodeURIComponent(fullQuery)}`;
 
   try {
-    const response = await axios.post(
-      "https://api.openai.com/v1/chat/completions",
-      {
-        model: "gpt-3.5-turbo",
-        messages: [
-          { role: "system", content: prompt },
-          { role: "user", content: userMessage },
-        ],
-        temperature: 0.7,
-      },
-      {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-      }
-    );
+    const response = await axios.get(apiURL);
+    let botReply = response.data.response || "मुझे समझने में दिक्कत हो रही है। क्या आप इसे दोहरा सकते हैं?";
 
-    const reply = response.data.choices[0].message.content.trim();
-    api.sendMessage(reply, threadID, messageID);
-    api.setMessageReaction("✅", messageID, () => {}, true);
+    // **यूजर की हिस्ट्री स्टोर करें (अब 15 मैसेज तक)**
+    userMemory[senderID].push(`User: ${userQuery}`);
+    userMemory[senderID].push(`Bot: ${botReply}`);
+    if (userMemory[senderID].length > 15) userMemory[senderID].splice(0, 2);
+
+    return api.sendMessage({
+      body: botReply,
+      mentions: [{
+        tag: "Bot",
+        id: api.getCurrentUserID()
+      }]
+    }, threadID, messageID);
   } catch (error) {
-    console.error("OpenAI API Error:", error.message);
-    api.sendMessage("I'm having trouble replying right now.", threadID, messageID);
-    api.setMessageReaction("❌", messageID, () => {}, true);
+    console.error("API Error:", error.message);
+    return api.sendMessage("❌ AI से जवाब लाने में समस्या हुई। कृपया बाद में प्रयास करें।", threadID, messageID);
   }
 };
 
-module.exports.run = async () => {
-  // No command needed
+// **बॉट के कमांड**
+module.exports.run = async function ({ api, event, args }) {
+  const { threadID, messageID, senderID } = event;
+  const command = args[0] && args[0].toLowerCase();
+
+  if (command === "on") {
+    isActive = true;
+    return api.sendMessage("✅ Hercai bot अब सक्रिय है।", threadID, messageID);
+  } else if (command === "off") {
+    isActive = false;
+    return api.sendMessage("⚠️ Hercai bot अब निष्क्रिय है।", threadID, messageID);
+  } else if (command === "clear") {
+    if (args[1] && args[1].toLowerCase() === "all") {
+      userMemory = {};
+      return api.sendMessage("🧹 सभी उपयोगकर्ताओं की बातचीत की हिस्ट्री क्लियर कर दी गई है।", threadID, messageID);
+    }
+    if (userMemory[senderID]) {
+      delete userMemory[senderID];
+      return api.sendMessage("🧹 आपकी बातचीत की हिस्ट्री क्लियर कर दी गई है।", threadID, messageID);
+    } else {
+      return api.sendMessage("⚠️ आपकी कोई भी हिस्ट्री पहले से मौजूद नहीं है।", threadID, messageID);
+    }
+  }
 };
