@@ -1,30 +1,34 @@
 const fs = require("fs-extra");
 const path = require("path");
+const axios = require("axios");
 
 module.exports.config = {
   name: "locknick",
-  version: "1.0.0",
+  version: "1.3.0",
   hasPermssion: 1,
-  credits: "Sardar RDX",
-  description: "Lock all members' nicknames in a group",
+  credits: "Sardar RDX + ChatGPT",
+  description: "Lock group name, photo, and nicknames. Mention everyone to lock all nicknames to a custom name.",
   commandCategory: "group",
-  usages: "[on/off]",
+  usages: "[on/off/add/remove] (@tag)",
   cooldowns: 5
 };
 
-const lockNickDataPath = path.join(__dirname, "cache", "locknick.json");
-let lockNickData = fs.existsSync(lockNickDataPath) ? JSON.parse(fs.readFileSync(lockNickDataPath)) : {};
+const lockDataPath = path.join(__dirname, "cache", "locknick.json");
+let lockData = fs.existsSync(lockDataPath) ? JSON.parse(fs.readFileSync(lockDataPath)) : {};
 
 function saveLockData() {
-  fs.writeFileSync(lockNickDataPath, JSON.stringify(lockNickData, null, 2));
+  fs.writeFileSync(lockDataPath, JSON.stringify(lockData, null, 2));
 }
 
-module.exports.run = async function ({ api, event, args, Threads }) {
+module.exports.run = async function ({ api, event, args }) {
   const threadID = event.threadID;
+  const mentions = Object.keys(event.mentions);
 
-  if (!args[0]) return api.sendMessage("⚠️ استعمال: locknick on/off", threadID, event.messageID);
+  if (!args[0]) return api.sendMessage("⚠️ استعمال: locknick on/off/add/remove @user", threadID, event.messageID);
 
-  if (args[0].toLowerCase() === "on") {
+  const action = args[0].toLowerCase();
+
+  if (action === "on") {
     const threadInfo = await api.getThreadInfo(threadID);
     const nicknames = {};
 
@@ -32,38 +36,129 @@ module.exports.run = async function ({ api, event, args, Threads }) {
       nicknames[user.id] = user.nickname || "";
     }
 
-    lockNickData[threadID] = nicknames;
+    lockData[threadID] = {
+      nicknames,
+      threadName: threadInfo.threadName,
+      imageSrc: threadInfo.imageSrc || null
+    };
     saveLockData();
 
-    return api.sendMessage("🔒 تمام ممبرز کے nicknames لاک کر دیے گئے ہیں۔", threadID, event.messageID);
+    return api.sendMessage("🔒 Group name, image aur nicknames lock kar diye gaye hain.", threadID, event.messageID);
   }
 
-  if (args[0].toLowerCase() === "off") {
-    if (!lockNickData[threadID]) return api.sendMessage("⚠️ Nickname پہلے سے unlock ہیں۔", threadID, event.messageID);
+  if (action === "off") {
+    if (!lockData[threadID]) return api.sendMessage("⚠️ Pehle se unlocked hai.", threadID, event.messageID);
 
-    delete lockNickData[threadID];
+    delete lockData[threadID];
     saveLockData();
-    return api.sendMessage("✅ Nickname لاک ختم کر دیا گیا ہے۔", threadID, event.messageID);
+    return api.sendMessage("✅ Sab locks hata diye gaye hain.", threadID, event.messageID);
   }
 
-  return api.sendMessage("❌ Invalid input! استعمال کریں: locknick on/off", threadID, event.messageID);
+  if (action === "add") {
+    if (!mentions[0]) return api.sendMessage("⚠️ Kisi ko tag karein.", threadID, event.messageID);
+    const userID = mentions[0];
+
+    const threadInfo = await api.getThreadInfo(threadID);
+    const user = threadInfo.userInfo.find(u => u.id == userID);
+    const currentNickname = user?.nickname || "";
+
+    if (!lockData[threadID]) lockData[threadID] = { nicknames: {} };
+    if (!lockData[threadID].nicknames) lockData[threadID].nicknames = {};
+
+    lockData[threadID].nicknames[userID] = currentNickname;
+
+    saveLockData();
+    return api.sendMessage(`✅ ${user.name} ka nickname lock kar diya gaya hai.`, threadID, event.messageID);
+  }
+
+  if (action === "remove") {
+    if (!mentions[0]) return api.sendMessage("⚠️ Kisi ko tag karein.", threadID, event.messageID);
+    const userID = mentions[0];
+
+    if (lockData[threadID] && lockData[threadID].nicknames?.[userID]) {
+      delete lockData[threadID].nicknames[userID];
+      saveLockData();
+      return api.sendMessage("✅ Nickname lock hata diya gaya hai.", threadID, event.messageID);
+    } else {
+      return api.sendMessage("⚠️ Is user ka nickname locked nahi hai.", threadID, event.messageID);
+    }
+  }
+
+  return api.sendMessage("❌ Invalid input! Use: locknick on/off/add/remove @user", threadID, event.messageID);
 };
 
 module.exports.handleEvent = async function ({ api, event }) {
   const { threadID, logMessageType, logMessageData } = event;
 
-  if (!lockNickData[threadID]) return;
+  if (!lockData[threadID]) return;
 
+  // Lock nicknames
   if (logMessageType === "log:thread-nickname") {
     const userID = logMessageData.participant_id;
-    const lockedNick = lockNickData[threadID][userID] || "";
+    const lockedNick = lockData[threadID].nicknames?.[userID];
 
-    if (logMessageData.nickname !== lockedNick) {
+    if (lockedNick !== undefined && logMessageData.nickname !== lockedNick) {
       await api.changeNickname(lockedNick, threadID, userID);
-      api.sendMessage(
-        `🔄 Nickname detect ہوا: "${logMessageData.nickname || "خالی"}"\nپرانا nickname دوبارہ لگا دیا گیا۔`,
-        threadID
-      );
+      api.sendMessage(`🔄 Nickname badla gaya tha: "${logMessageData.nickname || "خالی"}"\nWapas purana laga diya gaya.`, threadID);
     }
+  }
+
+  // Lock group name
+  if (logMessageType === "log:thread-name") {
+    const originalName = lockData[threadID].threadName;
+    if (logMessageData.name !== originalName) {
+      await api.setTitle(originalName, threadID);
+      api.sendMessage("⚠️ Group name change kiya gaya tha. Wapas original name set kar diya gaya hai.", threadID);
+    }
+  }
+
+  // Lock group image
+  if (logMessageType === "log:thread-image") {
+    const originalImg = lockData[threadID].imageSrc;
+    if (originalImg) {
+      try {
+        const imgRes = await axios.get(originalImg, { responseType: "stream" });
+        await api.changeGroupImage(imgRes.data, threadID);
+        api.sendMessage("⚠️ Group image change ki gayi thi. Wapas original image laga di gayi hai.", threadID);
+      } catch (err) {
+        console.log("Image restore failed:", err.message);
+      }
+    }
+  }
+
+  // Mention everyone nickname lock
+  if (
+    event.body &&
+    event.body.toLowerCase().startsWith("mention everyone")
+  ) {
+    const args = event.body.split(" ");
+    args.shift(); // remove 'mention'
+    args.shift(); // remove 'everyone'
+    const customNick = args.join(" ") || "🔥Member";
+
+    const threadInfo = await api.getThreadInfo(threadID);
+    const mentions = [];
+
+    if (!lockData[threadID]) lockData[threadID] = { nicknames: {} };
+    if (!lockData[threadID].nicknames) lockData[threadID].nicknames = {};
+
+    for (const user of threadInfo.userInfo) {
+      if (user.id !== api.getCurrentUserID()) {
+        await api.changeNickname(customNick, threadID, user.id);
+        lockData[threadID].nicknames[user.id] = customNick;
+
+        mentions.push({
+          tag: user.name,
+          id: user.id
+        });
+      }
+    }
+
+    saveLockData();
+
+    return api.sendMessage({
+      body: `📢 All members' nicknames set to: "${customNick}" and locked.`,
+      mentions
+    }, threadID);
   }
 };
