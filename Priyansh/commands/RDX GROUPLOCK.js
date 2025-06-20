@@ -1,163 +1,93 @@
 const fs = require("fs-extra");
-const path = require("path");
 const axios = require("axios");
+const path = require("path");
 
 module.exports.config = {
-  name: "locknick",
-  version: "1.4.0",
+  name: "lockgroup",
+  version: "1.0.0",
   hasPermssion: 1,
-  credits: "Sardar RDX + ChatGPT",
-  description: "Lock group name, photo, and nicknames. Mention everyone to lock nicknames.",
+  credits: "Raj",
+  description: "Group ka name aur photo lock karein, agar koi change kare to wapas reset ho jaye",
   commandCategory: "group",
-  usages: "[on/off/add/remove] (@tag)",
+  usages: "[on/off]",
   cooldowns: 5
 };
 
-const lockDataPath = path.join(__dirname, "cache", "locknick.json");
-let lockData = fs.existsSync(lockDataPath) ? JSON.parse(fs.readFileSync(lockDataPath)) : {};
-
-function saveLockData() {
-  fs.writeFileSync(lockDataPath, JSON.stringify(lockData, null, 2));
-}
+const lockData = {}; // RAM mein lock info store
 
 module.exports.run = async function ({ api, event, args }) {
   const threadID = event.threadID;
-  const mentions = Object.keys(event.mentions);
 
-  if (!args[0]) return api.sendMessage("⚠️ استعمال: locknick on/off/add/remove @user", threadID, event.messageID);
+  if (!args[0]) return api.sendMessage("❌ Istemaal karein: lockgroup on/off", threadID);
 
-  const action = args[0].toLowerCase();
+  if (args[0].toLowerCase() === "on") {
+    try {
+      const threadInfo = await api.getThreadInfo(threadID);
+      const groupName = threadInfo.threadName;
+      const groupImageSrc = threadInfo.imageSrc;
 
-  if (action === "on") {
-    const threadInfo = await api.getThreadInfo(threadID);
-    const nicknames = {};
-    for (const user of threadInfo.userInfo) {
-      nicknames[user.id] = user.nickname || "";
+      let imagePath = null;
+
+      // Group photo download aur save karo
+      if (groupImageSrc) {
+        const img = await axios.get(groupImageSrc, { responseType: "arraybuffer" });
+        imagePath = path.join(__dirname, "cache", `group_${threadID}.jpg`);
+        fs.writeFileSync(imagePath, Buffer.from(img.data, "binary"));
+      }
+
+      lockData[threadID] = {
+        name: groupName,
+        image: imagePath
+      };
+
+      return api.sendMessage(`🔒 Group ka name aur photo lock kar diye gaye hain!\nAgar koi change karega to main wapas reset kar dunga.`, threadID);
+    } catch (err) {
+      console.log(err);
+      return api.sendMessage("⚠️ Lock fail ho gaya. Kuch masla ho gaya hai!", threadID);
     }
-
-    lockData[threadID] = {
-      nicknames,
-      threadName: threadInfo.threadName || "Group",
-      imageSrc: threadInfo.imageSrc || null
-    };
-    saveLockData();
-
-    return api.sendMessage("🔒 Group name, image aur nicknames lock kar diye gaye hain.", threadID, event.messageID);
   }
 
-  if (action === "off") {
-    if (!lockData[threadID]) return api.sendMessage("⚠️ Pehle se unlocked hai.", threadID, event.messageID);
+  if (args[0].toLowerCase() === "off") {
+    if (!lockData[threadID]) return api.sendMessage("⚠️ Group pehle hi unlock hai!", threadID);
+
+    if (lockData[threadID].image) fs.unlinkSync(lockData[threadID].image);
     delete lockData[threadID];
-    saveLockData();
-    return api.sendMessage("✅ Sab locks hata diye gaye hain.", threadID, event.messageID);
+    return api.sendMessage("✅ Group ka name aur photo unlock kar diya gaya hai.", threadID);
   }
 
-  if (action === "add") {
-    if (!mentions[0]) return api.sendMessage("⚠️ Kisi ko tag karein.", threadID, event.messageID);
-    const userID = mentions[0];
-    const threadInfo = await api.getThreadInfo(threadID);
-    const user = threadInfo.userInfo.find(u => u.id == userID);
-    const currentNickname = user?.nickname || "";
-
-    if (!lockData[threadID]) lockData[threadID] = { nicknames: {} };
-    if (!lockData[threadID].nicknames) lockData[threadID].nicknames = {};
-
-    lockData[threadID].nicknames[userID] = currentNickname;
-
-    saveLockData();
-    return api.sendMessage(`✅ ${user.name} ka nickname lock kar diya gaya hai.`, threadID, event.messageID);
-  }
-
-  if (action === "remove") {
-    if (!mentions[0]) return api.sendMessage("⚠️ Kisi ko tag karein.", threadID, event.messageID);
-    const userID = mentions[0];
-    if (lockData[threadID]?.nicknames?.[userID]) {
-      delete lockData[threadID].nicknames[userID];
-      saveLockData();
-      return api.sendMessage("✅ Nickname lock hata diya gaya hai.", threadID, event.messageID);
-    } else {
-      return api.sendMessage("⚠️ Is user ka nickname locked nahi hai.", threadID, event.messageID);
-    }
-  }
-
-  return api.sendMessage("❌ Invalid input! Use: locknick on/off/add/remove @user", threadID, event.messageID);
+  return api.sendMessage("❌ Ghalat option! Istemaal karein: lockgroup on/off", threadID);
 };
 
 module.exports.handleEvent = async function ({ api, event }) {
-  const { threadID, logMessageType, logMessageData, body } = event;
-
+  const threadID = event.threadID;
   if (!lockData[threadID]) return;
 
-  // Log the event for debug
-  console.log("📥 Event Type:", logMessageType);
-
-  // Lock nickname changes
-  if (logMessageType === "log:thread-nickname") {
-    const userID = logMessageData.participant_id;
-    const lockedNick = lockData[threadID].nicknames?.[userID];
-
-    if (lockedNick !== undefined && logMessageData.nickname !== lockedNick) {
-      await api.changeNickname(lockedNick, threadID, userID);
-      api.sendMessage(`🔄 Nickname badla gaya tha: "${logMessageData.nickname || "خالی"}"\nWapas purana laga diya gaya.`, threadID);
-    }
-  }
-
-  // ✅ Fix: Lock group name (bug-free)
-  if (logMessageType === "log:thread-name") {
-    const originalName = lockData[threadID].threadName;
-    if (logMessageData?.name && logMessageData.name !== originalName) {
-      try {
-        await api.setTitle(originalName, threadID);
-        api.sendMessage("⚠️ Group name change hua tha. Wapas original name set kar diya gaya.", threadID);
-      } catch (err) {
-        console.error("❌ Group name restore failed:", err.message);
-      }
-    }
-  }
-
-  // Lock group image
-  if (logMessageType === "log:thread-image") {
-    const originalImg = lockData[threadID].imageSrc;
-    if (originalImg) {
-      try {
-        const imgRes = await axios.get(originalImg, { responseType: "stream" });
-        await api.changeGroupImage(imgRes.data, threadID);
-        api.sendMessage("⚠️ Group image change ki gayi thi. Wapas original image laga di gayi hai.", threadID);
-      } catch (err) {
-        console.error("❌ Image restore failed:", err.message);
-      }
-    }
-  }
-
-  // Mention everyone → set + lock all nicknames
-  if (body && body.toLowerCase().startsWith("mention everyone")) {
-    const args = body.split(" ");
-    args.shift(); // remove 'mention'
-    args.shift(); // remove 'everyone'
-    const customNick = args.join(" ") || "🔥Member";
-
+  try {
     const threadInfo = await api.getThreadInfo(threadID);
-    const mentions = [];
+    const currentName = threadInfo.threadName;
+    const currentImage = threadInfo.imageSrc;
 
-    if (!lockData[threadID].nicknames) lockData[threadID].nicknames = {};
+    const { name: lockedName, image: lockedImagePath } = lockData[threadID];
 
-    for (const user of threadInfo.userInfo) {
-      if (user.id !== api.getCurrentUserID()) {
-        try {
-          await api.changeNickname(customNick, threadID, user.id);
-          lockData[threadID].nicknames[user.id] = customNick;
-          mentions.push({ tag: user.name, id: user.id });
-        } catch (e) {
-          console.error(`❌ Nickname set failed for ${user.id}:`, e.message);
-        }
-      }
+    // Name check karo
+    if (currentName !== lockedName) {
+      await api.setTitle(lockedName, threadID);
+      api.sendMessage(`⚠️ Group ka name change kiya gaya tha. Wapas "${lockedName}" set kar diya gaya hai.`, threadID);
     }
 
-    saveLockData();
+    // Photo check karo
+    if (lockedImagePath && currentImage) {
+      const currentImgRes = await axios.get(currentImage, { responseType: "arraybuffer" });
+      const currentBuffer = Buffer.from(currentImgRes.data, "binary");
 
-    return api.sendMessage({
-      body: `📢 All members' nicknames set to: "${customNick}" and locked.`,
-      mentions
-    }, threadID);
+      const lockedBuffer = fs.readFileSync(lockedImagePath);
+
+      if (!currentBuffer.equals(lockedBuffer)) {
+        await api.changeGroupImage(fs.createReadStream(lockedImagePath), threadID);
+        api.sendMessage(`🖼️ Group ki photo change kar di gayi thi. Wapas lock wali photo laga di gayi hai.`, threadID);
+      }
+    }
+  } catch (err) {
+    console.log("Lockgroup event mein error:", err.message);
   }
 };
